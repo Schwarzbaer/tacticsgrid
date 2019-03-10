@@ -6,17 +6,28 @@ from panda3d.core import Filename
 from panda3d.core import Loader
 from panda3d.core import LoaderOptions
 
+from panda3d.egg import EggData
+from panda3d.egg import load_egg_data
+
 from direct.showbase.ShowBase import ShowBase
 from direct.task.Task import Task
 
 from tacticsgrid import grid
 
 
+# Load (PandaLoader)
+#loader = Loader.getGlobalPtr()
+#node = loader.loadSync(Filename("navmeshthingy.egg"), LoaderOptions())
+#model = NodePath(node)
+
+# Load (EggData)
+egg_data = EggData()
+egg_data.read(Filename("navmeshthingy.egg"))
+node = load_egg_data(egg_data)
+model = NodePath(node)
+
+
 # Separate navmesh and level geometry
-loader = Loader.getGlobalPtr()
-#node = self.loader.loadSync(Filename(modelPath), loaderOptions)
-#model = loader.load_model("navmeshthingy.egg")
-model = NodePath(loader.loadSync(Filename("navmeshthingy.egg"), LoaderOptions()))
 navmesh = NodePath("navmesh")
 level = NodePath("level")
 for geomnode in model.node().get_children():
