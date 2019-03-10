@@ -18,9 +18,6 @@ def find_stepping_points(navigation_mesh, spacing=0.5,
     # TODO: Switches to make collision tests sequential, to save memory at
     #   the cost of time.
 
-    # TODO: This should be attached to navigation_mesh. However, that spams
-    #   this error why?
-    #   :mathutil(warning): BoundingLine::contains_geometric() called with BoundingLine
     collision_root = navigation_mesh.attach_new_node(CollisionNode('ray_grid'))
     collision_root.node().setFromCollideMask(BitMask32.bit(1))
     if show_probes:
