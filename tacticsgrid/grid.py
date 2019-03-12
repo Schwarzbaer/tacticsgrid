@@ -11,22 +11,14 @@ from panda3d.core import RigidBodyCombiner
 
 
 def find_stepping_points(navigation_mesh, spacing=0.5,
-                         threshold=0.001, show_probes=False):
+                         threshold=0.001):
     # spacing: Distance between adjacent points
     # threshold: Maximum distance at which collisions will be considered
     #   to be the same point, and filtered out
-    # TODO: Switches to make collision tests sequential, to save memory at
-    #   the cost of time.
-
     collision_root = navigation_mesh.attach_new_node(CollisionNode('ray_grid'))
-    collision_root.node().setFromCollideMask(BitMask32.bit(1))
-    if show_probes:
-        collision_root.show()
     collision_queue = CollisionHandlerQueue()
     collision_traverser = CollisionTraverser('stepping point traverser')
     collision_traverser.add_collider(collision_root, collision_queue)
-    if show_probes:
-        collision_traverser.show_collisions(navigation_mesh)
 
     def step_values(low_bound, high_bound, spacing):
         num_steps = int((high_bound - low_bound) / spacing + 1)
