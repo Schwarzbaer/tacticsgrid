@@ -1,5 +1,6 @@
 from collections import defaultdict
 from itertools import product
+from random import choice
 
 from panda3d.core import Vec2
 from panda3d.core import Vec3
@@ -14,6 +15,9 @@ from panda3d.core import LineSegs
 
 from direct.showbase.ShowBase import ShowBase
 
+from pychology.simple_search.a_star import search
+from pychology.simple_search.a_star import NoPath
+
 from optimizer import optimize_collisions
 
 
@@ -22,6 +26,7 @@ class DebugVisualization:
         self.level = level
         self.debug_vis = []
         self.adj_lines = None
+        self.path_vis = None
 
     def update(self, navgrid, adjacency):
         # Grid points
@@ -45,16 +50,31 @@ class DebugVisualization:
             self.adj_lines.remove()
         offset = Vec3(0, 0, 0.1)
         ls = LineSegs()
-        for from_idx, to_idx, cost in adjacency:
-            _, _, from_coord = navgrid[from_idx]
-            _, _, to_coord = navgrid[to_idx]
-            ls.set_color(cost - 1.0, 2.0 - cost, 0)
-            ls.move_to(from_coord + offset)
-            ls.set_color(cost - 1.0, 2.0 - cost, 0)
-            ls.draw_to(to_coord + offset)
+        for from_idx in adjacency.keys():
+            for to_idx, cost in adjacency[from_idx].items():
+                _, _, from_coord = navgrid[from_idx]
+                _, _, to_coord = navgrid[to_idx]
+                ls.set_color(cost - 1.0, 2.0 - cost, 0)
+                ls.move_to(from_coord + offset)
+                ls.set_color(cost - 1.0, 2.0 - cost, 0)
+                ls.draw_to(to_coord + offset)
         self.adj_lines = NodePath(ls.create())
         self.adj_lines.reparent_to(self.level)
-        #import pdb; pdb.set_trace()
+
+    def show_path(self, path, navgrid, offset=0.1):
+        _, indices = path
+        if self.path_vis is not None:
+            self.path_vis.remove_node()
+        offset = Vec3(0, 0, offset)
+        ls = LineSegs()
+        _, _, coord = navgrid[indices[0]]
+        ls.set_color(1, 0, 0)
+        ls.move_to(coord + offset)
+        for idx in indices[1:]:
+            _, _, coord = navgrid[idx]
+            ls.draw_to(coord + offset)
+        self.path_vis = NodePath(ls.create())
+        self.path_vis.reparent_to(self.level)
         
     def destroy(self):
         for dv in self.debug_vis:
@@ -133,7 +153,7 @@ class TerrainTraverser:
     def __init__(self, level):
         self.level = level
 
-        self.traverser = CollisionTraverser('first point finder')
+        self.traverser = CollisionTraverser('walking collider')
         self.segment = CollisionSegment(0, 0, 0, 1, 0, 0)
         segment_node = CollisionNode('segment')
         segment_node.add_solid(self.segment)
@@ -190,40 +210,97 @@ def determine_adjacenjy(level, navgrid):
                             adjacency.append((from_idx, to_idx, cost))
         
     tt.remove()
-    return adjacency
+    adj_dict = {}
+    for from_idx, to_idx, cost in adjacency:
+        if from_idx not in adj_dict:
+            adj_dict[from_idx] = {}
+        adj_dict[from_idx][to_idx] = cost
+    return adj_dict
 
 
-if __name__=='__main__':
-    ShowBase()
-    base.accept('escape', base.task_mgr.stop)
-    cam_focus = Vec3(0, 0, 0)
-    cam_offset = Vec3(-40, -40, 40)
-    base.cam.set_pos(cam_focus + cam_offset)
-    base.cam.look_at(cam_focus)
-
-    level = base.loader.load_model("level.bam")
-    level.set_collide_mask(1)
-    optimize_collisions(level, convert_geometry=True)
-    level.reparent_to(base.render)
-
-    # origin = Vec3(0, 0, 10)
-    # x_interval = (-15, 15, 0.5)
-    # y_interval = (-15, 15, 0.5)
+def scan_level(level):
     bottom, top = level.get_tight_bounds()
     origin = Vec3(0, 0, top.z + 10)
     x_interval = (bottom.x, top.x, 0.5)
     y_interval = (bottom.y, top.y, 0.5)
-    print("Finding footfalls")
+    print("  Finding footfalls")
     navgrid = find_footfalls(
         level,
         origin,
         x_interval,
         y_interval,
     )
-    print("Filtering for standability")
+    print("  Filtering for standability")
     navgrid = filter_for_standability(level, navgrid)
-    print("Determining adjacency")
+    print("  Determining adjacency")
     adjacency = determine_adjacenjy(level, navgrid)
+    return navgrid, adjacency
+
+
+def to_wezu(navgrid, adjacency):
+    # {'idx': [coord, [[neighbor_idx, cost], ...], {}],
+    #  'lookup': {coord: idx}
+    # }
+    wezu = dict(lookup={})
+    for idx, (x_idx, y_idx, coord) in enumerate(navgrid):
+        wezu[str(idx)] = [coord, [], {}]
+        wezu['lookup'][(coord.x, coord.y, coord.z)] = idx
+    for from_idx, to_idx, cost in adjacency:
+        wezu[str(from_idx)][1].append([to_idx, cost])
+    return wezu
+
+
+class Navgrid:
+    def __init__(self, navgrid, adjacency):
+        pass
+
+    def neighbors(self, from_idx):
+        return {idx: cost}
+
+    def nearest(self, coord):
+        return idx
+
+
+if __name__=='__main__':
+    ShowBase()
+    base.accept('escape', base.task_mgr.stop)
+
+    level = base.loader.load_model("level.bam")
+    level.set_collide_mask(1)
+    optimize_collisions(level, convert_geometry=True)
+    level.reparent_to(base.render)
+
+    bottom, top = level.get_tight_bounds()
+    cam_focus = bottom + top * 0.5
+    cam_offset = Vec3(-1, -1, 1) * (top - bottom).length()
+    base.cam.set_pos(cam_focus + cam_offset)
+    base.cam.look_at(cam_focus)
+
+    print("Starting level scan...")
+    navgrid, adjacency = scan_level(level)
+    #print("converting to wezu standard")
+    #wezu_navgrid = to_wezu(navgrid, adjacency)
+    #from pprint import pprint
+    #pprint(wezu_navgrid)
+    #import pdb; pdb.set_trace()
+
     print("Creating debug visualization")
-    DebugVisualization(level).update(navgrid, adjacency)
+    #DebugVisualization(level).update(navgrid, adjacency)
+    
+    dv = DebugVisualization(level)
+    def neighbors(idx):
+        return [(i, c) for i, c in adjacency[idx].items()]
+    def euclidean_distance(from_idx, to_idx):
+        return (navgrid[from_idx][2] - navgrid[to_idx][2]).length()
+    def update_path(task):
+        from_idx = choice(list(adjacency.keys()))
+        to_idx = choice(list(adjacency.keys()))
+        try:
+            path = search(neighbors, from_idx, to_idx, euclidean_distance)
+            dv.show_path(path, navgrid)
+        except NoPath:
+            print(from_idx, to_idx)
+        return task.again
+    #base.task_mgr.do_method_later(1, update_path, 'update path')
+    base.task_mgr.add(update_path)
     base.run()

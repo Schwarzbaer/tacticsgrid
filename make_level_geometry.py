@@ -50,7 +50,7 @@ inner_fence = [
         vector_c=(0, 0, 1),
     ),
 ]
-level_def = sandbox + playground_towers # + inner_fence
+level_def = sandbox + playground_towers + inner_fence
 # level_def = [
 #     dict(
 #         type='square',
