@@ -1,6 +1,5 @@
 from collections import defaultdict
 from itertools import product
-from random import choice
 
 from panda3d.core import Vec2
 from panda3d.core import Vec3
@@ -13,76 +12,9 @@ from panda3d.core import CollisionSphere
 from panda3d.core import CollisionSegment
 from panda3d.core import LineSegs
 
-from direct.showbase.ShowBase import ShowBase
-
-from pychology.simple_search.a_star import search
-from pychology.simple_search.a_star import NoPath
-
-from optimizer import optimize_collisions
-
-
-class DebugVisualization:
-    def __init__(self, level):
-        self.level = level
-        self.debug_vis = []
-        self.adj_lines = None
-        self.path_vis = None
-
-    def update(self, navgrid, adjacency):
-        # Grid points
-        # Adjust number of visual debug indicators
-        if len(self.debug_vis) > len(navgrid):
-            for dv in self.debug_vis[len(navgrid):]:
-                dv.remove_node()
-            self.debug_vis = self.debug_vis[0:len(navgrid)]
-        elif len(self.debug_vis) < len(navgrid):
-            for _ in range(len(navgrid) - len(self.debug_vis)):
-                np = base.loader.load_model("models/smiley")
-                np.set_scale(0.1)
-                np.reparent_to(self.level)
-                self.debug_vis.append(np)
-        # Adjust positions
-        for dv, (_, _, pos) in zip(self.debug_vis, navgrid):
-            dv.set_pos(pos)
-
-        # Adjacencies
-        if self.adj_lines is not None:
-            self.adj_lines.remove()
-        offset = Vec3(0, 0, 0.1)
-        ls = LineSegs()
-        for from_idx in adjacency.keys():
-            for to_idx, cost in adjacency[from_idx].items():
-                _, _, from_coord = navgrid[from_idx]
-                _, _, to_coord = navgrid[to_idx]
-                ls.set_color(cost - 1.0, 2.0 - cost, 0)
-                ls.move_to(from_coord + offset)
-                ls.set_color(cost - 1.0, 2.0 - cost, 0)
-                ls.draw_to(to_coord + offset)
-        self.adj_lines = NodePath(ls.create())
-        self.adj_lines.reparent_to(self.level)
-
-    def show_path(self, path, navgrid, offset=0.1):
-        _, indices = path
-        if self.path_vis is not None:
-            self.path_vis.remove_node()
-        offset = Vec3(0, 0, offset)
-        ls = LineSegs()
-        _, _, coord = navgrid[indices[0]]
-        ls.set_color(1, 0, 0)
-        ls.move_to(coord + offset)
-        for idx in indices[1:]:
-            _, _, coord = navgrid[idx]
-            ls.draw_to(coord + offset)
-        self.path_vis = NodePath(ls.create())
-        self.path_vis.reparent_to(self.level)
-        
-    def destroy(self):
-        for dv in self.debug_vis:
-            dv.remove_node()
-        self.debug_vis = []
-
 
 def find_footfalls(level, origin, x_interval, y_interval):
+    # Just your basic collision traverser setup.
     traverser = CollisionTraverser('first point finder')
     ray = CollisionRay(0, 0, 0, 0, 0, -1)
     ray_node = CollisionNode('ray')
@@ -218,11 +150,11 @@ def determine_adjacenjy(level, navgrid):
     return adj_dict
 
 
-def scan_level(level):
+def scan_level(level, stepsize=0.5):
     bottom, top = level.get_tight_bounds()
     origin = Vec3(0, 0, top.z + 10)
-    x_interval = (bottom.x, top.x, 0.5)
-    y_interval = (bottom.y, top.y, 0.5)
+    x_interval = (bottom.x, top.x, stepsize)
+    y_interval = (bottom.y, top.y, stepsize)
     print("  Finding footfalls")
     navgrid = find_footfalls(
         level,
@@ -235,6 +167,15 @@ def scan_level(level):
     print("  Determining adjacency")
     adjacency = determine_adjacenjy(level, navgrid)
     return navgrid, adjacency
+
+
+def nearest_node(navgrid, coord):
+    dists = [
+        ((c - coord).length(), idx)
+        for idx, (_, _, c) in enumerate(navgrid)
+    ]
+    dists.sort()
+    return dists[0][1]
 
 
 def to_wezu(navgrid, adjacency):
@@ -261,46 +202,63 @@ class Navgrid:
         return idx
 
 
-if __name__=='__main__':
-    ShowBase()
-    base.accept('escape', base.task_mgr.stop)
+class DebugVisualization:
+    def __init__(self, level):
+        self.level = level
+        self.debug_vis = []
+        self.adj_lines = None
+        self.path_vis = None
 
-    level = base.loader.load_model("level.bam")
-    level.set_collide_mask(1)
-    optimize_collisions(level, convert_geometry=True)
-    level.reparent_to(base.render)
+    def update(self, navgrid, adjacency):
+        # Grid points
+        # Adjust number of visual debug indicators
+        if len(self.debug_vis) > len(navgrid):
+            for dv in self.debug_vis[len(navgrid):]:
+                dv.remove_node()
+            self.debug_vis = self.debug_vis[0:len(navgrid)]
+        elif len(self.debug_vis) < len(navgrid):
+            for _ in range(len(navgrid) - len(self.debug_vis)):
+                np = base.loader.load_model("models/smiley")
+                np.set_scale(0.1)
+                np.reparent_to(self.level)
+                self.debug_vis.append(np)
+        # Adjust positions
+        for dv, (_, _, pos) in zip(self.debug_vis, navgrid):
+            dv.set_pos(pos)
 
-    bottom, top = level.get_tight_bounds()
-    cam_focus = bottom + top * 0.5
-    cam_offset = Vec3(-1, -1, 1) * (top - bottom).length()
-    base.cam.set_pos(cam_focus + cam_offset)
-    base.cam.look_at(cam_focus)
+        # Adjacencies
+        if self.adj_lines is not None:
+            self.adj_lines.remove()
+        offset = Vec3(0, 0, 0.1)
+        ls = LineSegs()
+        for from_idx in adjacency.keys():
+            for to_idx, cost in adjacency[from_idx].items():
+                _, _, from_coord = navgrid[from_idx]
+                _, _, to_coord = navgrid[to_idx]
+                ls.set_color(cost - 1.0, 2.0 - cost, 0)
+                ls.move_to(from_coord + offset)
+                ls.set_color(cost - 1.0, 2.0 - cost, 0)
+                ls.draw_to(to_coord + offset)
+        self.adj_lines = NodePath(ls.create())
+        self.adj_lines.reparent_to(self.level)
 
-    print("Starting level scan...")
-    navgrid, adjacency = scan_level(level)
-    #print("converting to wezu standard")
-    #wezu_navgrid = to_wezu(navgrid, adjacency)
-    #from pprint import pprint
-    #pprint(wezu_navgrid)
-    #import pdb; pdb.set_trace()
-
-    print("Creating debug visualization")
-    #DebugVisualization(level).update(navgrid, adjacency)
-    
-    dv = DebugVisualization(level)
-    def neighbors(idx):
-        return [(i, c) for i, c in adjacency[idx].items()]
-    def euclidean_distance(from_idx, to_idx):
-        return (navgrid[from_idx][2] - navgrid[to_idx][2]).length()
-    def update_path(task):
-        from_idx = choice(list(adjacency.keys()))
-        to_idx = choice(list(adjacency.keys()))
-        try:
-            path = search(neighbors, from_idx, to_idx, euclidean_distance)
-            dv.show_path(path, navgrid)
-        except NoPath:
-            print(from_idx, to_idx)
-        return task.again
-    #base.task_mgr.do_method_later(1, update_path, 'update path')
-    base.task_mgr.add(update_path)
-    base.run()
+    def show_path(self, path, navgrid, offset=0.1):
+        _, indices = path
+        if self.path_vis is not None:
+            self.path_vis.remove_node()
+        offset = Vec3(0, 0, offset)
+        ls = LineSegs()
+        _, _, coord = navgrid[indices[0]]
+        ls.set_color(1, 0, 0)
+        ls.set_thickness(3)
+        ls.move_to(coord + offset)
+        for idx in indices[1:]:
+            _, _, coord = navgrid[idx]
+            ls.draw_to(coord + offset)
+        self.path_vis = NodePath(ls.create())
+        self.path_vis.reparent_to(self.level)
+        
+    def destroy(self):
+        for dv in self.debug_vis:
+            dv.remove_node()
+        self.debug_vis = []

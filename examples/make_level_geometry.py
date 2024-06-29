@@ -1,71 +1,3 @@
-sandbox = [
-    dict(
-        type='square',
-        origin=(-15, -15, 0),
-        vector_a=(30, 0, 0),
-        vector_b=(0, 30, 0),
-    ),
-    dict(
-        type='fence',
-        origin=(-15, -15, 0),
-        vector_a=(30, 0, 0),
-        vector_b=(0, 30, 0),
-        vector_c=(0, 0, 3),
-    ),
-]
-playground_towers = [
-    dict(
-        type='block',
-        origin=(-1, -1, 0),
-        vector_a=(2, 0, 0),
-        vector_b=(0, 2, 0),
-        vector_c=(0, 0, 3),
-    ),
-    dict(
-        type='block',
-        origin=(-8, -1, 0),
-        vector_a=(2, 0, 0),
-        vector_b=(0, 2, 0),
-        vector_c=(0, 0, 3),
-    ),
-    dict(
-        type='square',
-        origin=(-6, -1, 3),
-        vector_a=(5, 0, 0),
-        vector_b=(0, 2, 0),
-    ),
-    dict(
-        type='square',
-        origin=(-1, -1, 3),
-        vector_a=(0, -8, -3),
-        vector_b=(2, 0, 0),
-    ),
-]
-inner_fence = [
-    dict(
-        type='fence',
-        origin=(-12, 0, 0),
-        vector_a=(12, -12, 0),
-        vector_b=(12, 12, 0),
-        vector_c=(0, 0, 1),
-    ),
-]
-level_def = sandbox + playground_towers + inner_fence
-# level_def = [
-#     dict(
-#         type='square',
-#         origin=(-2, -2, 0),
-#         vector_a=(4, 0, 0),
-#         vector_b=(0, 4, 0),
-#     ),
-#     dict(
-#         type='square',
-#         origin=(-2, 2, 0.5),
-#         vector_a=(2, 0, 0),
-#         vector_b=(0, -2, 0),
-#     ),
-# ]
-
 from random import random
 
 from panda3d.core import Vec3
@@ -80,11 +12,7 @@ from panda3d.core import GeomVertexWriter
 from panda3d.core import GeomTriangles
 from direct.showbase.ShowBase import ShowBase
 
-
-ShowBase()
-base.accept('escape', base.task_mgr.stop)
-base.cam.set_pos(-40, -40, 40)
-base.cam.look_at(0, 0, 0)
+from geometry_defs import playground, minilevel
 
 
 def make_geom(vertices, triangles):
@@ -209,15 +137,32 @@ geom_funcs = dict(
     fence=make_fence,
     block=make_block,
 )
-level = NodePath("level")
-level.reparent_to(base.render)
-geoms = []
-for element_def in level_def:
-    geom_type = element_def['type']
-    if geom_type in geom_funcs:
-        geoms.append(geom_funcs[geom_type](element_def))
-for geom in geoms:
-    geom.reparent_to(level)
-level.write_bam_file("level.bam")
 
-base.run()
+
+def make_geometry(level_def):
+    level = NodePath("level")
+    geoms = []
+    for element_def in level_def:
+        geom_type = element_def['type']
+        if geom_type in geom_funcs:
+            geoms.append(geom_funcs[geom_type](element_def))
+    for geom in geoms:
+        geom.reparent_to(level)
+    return level
+
+
+if __name__ == '__main__':
+    levels = dict(
+        playground=playground,
+        minilevel=minilevel,
+    )
+    ShowBase()
+    base.accept('escape', base.task_mgr.stop)
+    base.cam.set_pos(-40, -40, 40)
+    base.cam.look_at(0, 0, 0)
+    for level_name, level_definition in levels.items():
+        print(f"Processing {level_name}")
+        level = make_geometry(level_definition)
+        level.reparent_to(base.render)
+        level.write_bam_file(f"{level_name}.bam")
+    print("Done!")
